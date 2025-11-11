@@ -1,0 +1,183 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  clerkId       String?  @unique
+  email         String?  @unique
+  firstName     String?
+  lastName      String?
+  phone         String?
+  nationalId    String?  @unique  
+  role           Role     @default(PATIENT)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Patient-specific fields
+  dateOfBirth     DateTime?
+  gender          String?
+  address         String?
+  emergencyPhone  String?
+  onboarded       Boolean  @default(false)
+
+  // Relations
+  staff            Staff?
+  visits           Visit[]
+  transactions     Transaction[]
+  healthRecords    HealthRecord[]
+  medications      Medication[]
+  allergies        Allergy[]
+  medicalHistory   MedicalHistory[]
+  bookings         Booking[] @relation("UserBookings")
+}
+
+model Staff {
+  id          String   @id @default(uuid())
+  userId      String?  @unique
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  title       String?
+  department  String?
+  salary      Float?
+  role        String?
+
+  // Relations
+  visits      Visit[]  @relation("StaffVisits")
+}
+model Booking {
+  id             String         @id @default(uuid())
+  userId         String
+  scheduledDate  DateTime       // 📅 Only the date part is used for grouping
+  timeSlot       TimeSlot       // ⏰ Specific time slot in the day
+  status         BookingStatus  @default(PENDING)
+  reason          String?
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  user            User           @relation("UserBookings", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduledDate, timeSlot]) // ⚡ ensures only 1 user can book a slot
+}
+
+enum TimeSlot {
+  SLOT_09_10
+  SLOT_10_11
+  SLOT_11_12
+  SLOT_12_13
+  SLOT_14_15
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+model Visit {
+  id                String        @id @default(uuid())
+  userId             String?      // Patient
+  staffId            String?      // Doctor/Nurse
+  date               DateTime     @default(now())
+
+  // Core visit details
+  symptoms           String?
+  diagnosis          String?
+  notes               String?
+
+  // Vitals
+  temperature         Float?
+  weight               Float?
+  height               Float?
+  bloodPressure        String?
+  heartRate             Int?
+  respirationRate       Int?
+  oxygenSaturation      Int?
+
+  // Relations
+  user           User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  staff          Staff?           @relation("StaffVisits", fields: [staffId], references: [id], onDelete: SetNull)
+  medications    Medication[]     // 👈 NEW: prescriptions from this visit
+}
+
+model HealthRecord {
+  id           String   @id @default(uuid())
+  userId       String?
+  recordType   String
+  description  String?
+  date         DateTime @default(now())
+
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model Medication {
+  id             String     @id @default(uuid())
+  userId          String?
+  visitId         String?     // 👈 NEW: which visit this medication belongs to
+  name             String
+  dosage             String?
+  frequency            String?
+  startDate             DateTime?
+  endDate               DateTime?
+  prescribedBy          String?
+
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  visit   Visit?   @relation(fields: [visitId], references: [id], onDelete: SetNull) // 👈 NEW
+}
+
+model Allergy {
+  id         String   @id @default(uuid())
+  userId     String?
+  substance  String
+  reaction   String?
+  severity   String?
+
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model MedicalHistory {
+  id           String   @id @default(uuid())
+  userId       String?
+  condition    String
+  notes        String?
+  diagnosedAt  DateTime?
+
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model Transaction {
+  id            String           @id @default(uuid())
+  amount        Float
+  type          TransactionType
+  description   String?
+  date           DateTime        @default(now())
+
+  // Relations
+  createdById   String?
+  createdBy     User?             @relation(fields: [createdById], references: [id], onDelete: SetNull)
+}
+
+enum Role {
+  ADMIN
+  DOCTOR
+  NURSE
+  RECEPTIONIST
+  ACCOUNTANT
+  LAB_TECH
+  PHARMACIST
+  PATIENT
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
